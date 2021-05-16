@@ -2,8 +2,13 @@ package retry
 
 import (
 	"errors"
+	"math/rand"
 	"time"
 )
+
+func init() {
+	rand.Seed(time.Now().UnixNano())
+}
 
 var (
 	TimeoutErr = errors.New("backoff timeout err")
@@ -28,14 +33,34 @@ func NopBackoff(ttl int64) error {
 }
 
 type LinearBackoff struct {
-	delay int64
+	Delay int64
 }
 
 func (b *LinearBackoff) Wait(ttl int64) error {
-	if ttl < 0 || ttl-b.delay < 0 {
+	if ttl < 0 || ttl-b.Delay < 0 {
 		return TimeoutErr
 	}
 
-	time.Sleep(time.Duration(b.delay))
+	time.Sleep(time.Duration(b.Delay))
+	return nil
+}
+
+type RandomBackoff struct {
+	Jitter time.Duration
+	Delay  time.Duration
+}
+
+func (b *RandomBackoff) Wait(ttl int64) error {
+	if ttl < 0 {
+		return TimeoutErr
+	}
+
+	jitter := rand.Int63n(int64(b.Jitter))
+	delay := int64(b.Delay) + jitter
+	if ttl < delay {
+		return TimeoutErr
+	}
+
+	time.Sleep(time.Duration(jitter))
 	return nil
 }
