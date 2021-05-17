@@ -71,3 +71,56 @@ func (b *Backup) Execute(ctx context.Context, fn func() error) error {
 		}
 	}
 }
+
+/*
+ * ret, err := Backup{time.Second}.ExecuteWithResult(ctx, func() (interface{}, error){
+ *        return apply.exec()
+ * })
+ */
+func (b *Backup) ExecuteWithResult(ctx context.Context, fn func() (interface{}, error)) (interface{}, error) {
+	retChan := make(chan interface{})
+	async := func() {
+		ret, err := fn()
+		if err != nil {
+			retChan <- err
+		}
+		retChan <- ret
+	}
+	retChanFn := func(total int) {
+		var cnt int
+		for range retChan {
+			cnt++
+			if cnt == total {
+				return
+			}
+		}
+	}
+
+	go async()
+	ticker := time.NewTicker(b.BackupRequestMs)
+	hasBackRequest := false
+	for {
+		select {
+		case <-ctx.Done():
+			cnt := 1
+			if hasBackRequest {
+				cnt++
+			}
+			go retChanFn(cnt)
+			return nil, ctx.Err()
+		case <-ticker.C:
+			hasBackRequest = true
+			go async() // 启动backup request
+			ticker.Stop()
+		case ret := <-retChan:
+			if hasBackRequest {
+				go retChanFn(1)
+			}
+
+			if err, ok := ret.(error); ok {
+				return nil, err
+			}
+			return ret, nil
+		}
+	}
+}
