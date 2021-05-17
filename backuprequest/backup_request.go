@@ -6,26 +6,29 @@ import (
 )
 
 type Backup struct {
-	BackupRequestMs int64
+	BackupRequestMs time.Duration
 }
 
-func (b *Backup) Request(ctx context.Context, fn func() error) error {
+func (b *Backup) Execute(ctx context.Context, fn func() error) error {
 	errChan := make(chan error)
 	async := func() { errChan <- fn() }
 
 	go async()
-	ticker := time.NewTicker(time.Duration(b.BackupRequestMs))
-	isBackRequest := false
+	ticker := time.NewTicker(b.BackupRequestMs)
+	hasBackRequest := false
 	for {
 		select {
 		case <-ctx.Done():
+			if hasBackRequest {
+				go func() { <-errChan }()
+			}
 			return ctx.Err()
 		case <-ticker.C:
-			isBackRequest = true
+			hasBackRequest = true
 			go async() // 启动backup request
 			ticker.Stop()
 		case err := <-errChan:
-			if isBackRequest {
+			if hasBackRequest {
 				go func() { <-errChan }()
 			}
 			return err
