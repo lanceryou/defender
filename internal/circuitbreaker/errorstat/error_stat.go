@@ -56,7 +56,7 @@ func (s *errorStat) Stat(fn func() error) func() error {
 }
 
 func (s *errorStat) String() string {
-	return "err"
+	return "errStat"
 }
 
 type errBucket struct {

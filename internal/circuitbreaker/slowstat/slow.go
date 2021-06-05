@@ -61,7 +61,7 @@ func (s *SlowStat) Stat(fn func() error) func() error {
 }
 
 func (s *SlowStat) String() string {
-	return "slowRT"
+	return "slowStat"
 }
 
 //
