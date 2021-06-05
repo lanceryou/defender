@@ -2,7 +2,6 @@ package circuitbreaker
 
 import (
 	"errors"
-	"runtime"
 	"sync/atomic"
 	"time"
 
@@ -93,10 +92,8 @@ func (c *CircuitBreaker) Allow(fn func() error) error {
 			if !c.reachRetryTimestamp() {
 				return CircuitBreakerOpenErr
 			}
-			// 超过熔断时间，扭转HalfOpen cas判断失败如何处理
-			// 考虑如下场景 当前是open状态，并发下已经转成closed或者halfopen
+			// if cas fail,it means state has change,so we need load again
 			if !state.cas(Open, HalfOpen) {
-				runtime.Gosched()
 				continue
 			}
 		}
