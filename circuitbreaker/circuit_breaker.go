@@ -59,7 +59,7 @@ func (f StatDetectFunc) Detect(match int64, total int64) bool {
 
 func RatioDetect(ratio float64) StatDetectFunc {
 	return func(match int64, total int64) bool {
-		return base.Gte(float64(match)/float64(total), ratio)
+		return base.FloatGte(float64(match)/float64(total), ratio)
 	}
 }
 

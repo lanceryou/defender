@@ -6,10 +6,10 @@ import (
 
 const precision = 0.00000001
 
-func Gte(l, r float64) bool {
-	return l > r || Eq(l, r)
+func FloatGte(l, r float64) bool {
+	return l > r || FloatEq(l, r)
 }
 
-func Eq(l, r float64) bool {
+func FloatEq(l, r float64) bool {
 	return math.Abs(l-r) < precision
 }
