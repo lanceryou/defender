@@ -1,4 +1,4 @@
-package slow_response
+package slowstat
 
 import (
 	"sync/atomic"
