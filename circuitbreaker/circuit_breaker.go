@@ -2,6 +2,7 @@ package circuitbreaker
 
 import (
 	"errors"
+	"runtime"
 	"sync/atomic"
 	"time"
 
@@ -85,28 +86,32 @@ type CircuitBreaker struct {
  *
  */
 func (c *CircuitBreaker) Allow(fn func() error) error {
-	state := c.state.Load()
-	if state == Open {
-		// 没有超过预定熔断时间，直接返回
-		if !c.reachRetryTimestamp() {
-			return CircuitBreakerOpenErr
+	for {
+		state := c.state.Load()
+		if state == Open {
+			// 没有超过预定熔断时间，直接返回
+			if !c.reachRetryTimestamp() {
+				return CircuitBreakerOpenErr
+			}
+			// 超过熔断时间，扭转HalfOpen cas判断失败如何处理
+			// 考虑如下场景 当前是open状态，并发下已经转成closed或者halfopen
+			if !state.cas(Open, HalfOpen) {
+				runtime.Gosched()
+				continue
+			}
 		}
-		// 超过熔断时间，扭转HalfOpen cas判断失败如何处理
-		// 考虑如下场景 当前是open状态，并发下已经转成closed或者halfopen
-		state.cas(Open, HalfOpen)
+		// half open 尝试probe
+		err := c.stat(fn)
+		c.tryUpdateState(state, err)
+		return err
 	}
-	// half open 尝试probe
-	// 链式执行,收集stat信息
-	err := c.chainStat(fn)
-	c.tryUpdateState(state, err)
-	return err
 }
 
 func (c *CircuitBreaker) reachRetryTimestamp() bool {
 	return time.Now().UnixNano() >= c.nextRetryTimestampMs
 }
 
-func (c *CircuitBreaker) chainStat(fn func() error) error {
+func (c *CircuitBreaker) stat(fn func() error) error {
 	return c.opt.stat.Stat(fn)()
 }
 
