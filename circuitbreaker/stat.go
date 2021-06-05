@@ -1,10 +1,8 @@
 package circuitbreaker
 
-type StatFunc func() error
-
 // 统计熔断信息
 type CircuitBreakerStat interface {
-	Stat(fn StatFunc) StatFunc
+	Stat(fn func() error) func() error
 	Total() int64
 	MatchCount() int64
 	String() string
