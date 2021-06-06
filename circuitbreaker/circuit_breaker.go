@@ -76,7 +76,6 @@ func TotalDetect(total int64) StatDetectFunc {
 type CircuitBreaker struct {
 	opt                  Options
 	state                State
-	retryTimeoutMs       uint64
 	nextRetryTimestampMs int64
 }
 
@@ -88,7 +87,7 @@ func (c *CircuitBreaker) Allow(fn func() error) error {
 	for {
 		state := c.state.Load()
 		if state == Open {
-			// 没有超过预定熔断时间，直接返回
+			// state open and no reach retry time. refuse request.
 			if !c.reachRetryTimestamp() {
 				return CircuitBreakerOpenErr
 			}
@@ -143,5 +142,17 @@ func (c *CircuitBreaker) tryUpdateState(cur State, err error) {
 	if c.opt.detect.Detect(c.opt.stat.MatchCount(), c.opt.stat.Total()) {
 		c.state.Store(Open)
 		c.updateNextRetryTimestampMs()
+	}
+}
+
+func NewCircuitBreaker(option ...Option) *CircuitBreaker {
+	var opt Options
+	for _, o := range option {
+		o(&opt)
+	}
+
+	return &CircuitBreaker{
+		opt:   opt,
+		state: Closed,
 	}
 }
