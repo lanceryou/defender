@@ -62,9 +62,9 @@ func RatioDetect(ratio float64) StatDetectFunc {
 	}
 }
 
-func TotalDetect(total int64) StatDetectFunc {
+func TotalDetect(max int64) StatDetectFunc {
 	return func(match int64, total int64) bool {
-		return match >= total
+		return match >= max
 	}
 }
 

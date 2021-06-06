@@ -80,6 +80,9 @@ func (r *TimeRing) CurrentIndex(timeMills int64) int64 {
 			} else {
 				runtime.Gosched()
 			}
+		} else {
+			// something error, why happened
+			panic(fmt.Errorf("startTime %v > bucketStart %v", startTime, bucketStart))
 		}
 	}
 }
