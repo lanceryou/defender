@@ -83,7 +83,7 @@ func (b *Backup) Do(ctx context.Context, brMs time.Duration, fn func() (interfac
 			return nil, ctx.Err()
 		case <-b.t.After(brMs):
 			hasBackRequest = true
-			go async() // 启动backup request
+			go async() // start backup request
 			b.t.Stop()
 		case ret := <-retChan:
 			b.t.Stop()
