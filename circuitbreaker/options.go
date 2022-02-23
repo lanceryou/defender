@@ -3,22 +3,22 @@ package circuitbreaker
 // 拦截器设计
 // metrics 资源设计
 type Options struct {
-	stat           CircuitBreakerStat
-	detect         StatDetector
+	stats          []CircuitBreakerStat
+	detects        []CircuitDetector
 	retryTimeoutMs uint64
 }
 
 type Option func(*Options)
 
-func WithCircuitBreakerStat(name string) Option {
+func WithCircuitBreakerStat(stat ...CircuitBreakerStat) Option {
 	return func(options *Options) {
-		options.stat = GetStat(name)
+		options.stats = stat
 	}
 }
 
-func WithDetectName(name string) Option {
+func WithDetectName(detect ...CircuitDetector) Option {
 	return func(options *Options) {
-		options.detect = nil
+		options.detects = detect
 	}
 }
 

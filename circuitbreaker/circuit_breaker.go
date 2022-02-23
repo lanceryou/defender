@@ -46,28 +46,6 @@ func (s State) cas(expect State, update State) bool {
 	return atomic.CompareAndSwapInt32((*int32)(&s), int32(expect), int32(update))
 }
 
-type StatDetector interface {
-	Detect(match int64, total int64) bool
-}
-
-type StatDetectFunc func(match int64, total int64) bool
-
-func (f StatDetectFunc) Detect(match int64, total int64) bool {
-	return f(match, total)
-}
-
-func RatioDetect(ratio float64) StatDetectFunc {
-	return func(match int64, total int64) bool {
-		return base.FloatGte(float64(match)/float64(total), ratio)
-	}
-}
-
-func TotalDetect(max int64) StatDetectFunc {
-	return func(match int64, total int64) bool {
-		return match >= max
-	}
-}
-
 // slowRT
 // err
 // metrics
@@ -88,7 +66,7 @@ func (c *CircuitBreaker) Allow(fn func() error) error {
 		state := c.state.Load()
 		if state == Open {
 			// state open and no reach retry time. refuse request.
-			if !c.reachRetryTimestamp() {
+			if !c.reachRetryTimestamp(time.Now()) {
 				return CircuitBreakerOpenErr
 			}
 			// if cas fail,it means state has change,so we need load again
@@ -96,24 +74,28 @@ func (c *CircuitBreaker) Allow(fn func() error) error {
 				continue
 			}
 		}
-		// half open 尝试probe
+		// half open try probe
 		err := c.stat(fn)
 		c.tryUpdateState(state, err)
 		return err
 	}
 }
 
-func (c *CircuitBreaker) reachRetryTimestamp() bool {
-	return time.Now().UnixNano() >= c.nextRetryTimestampMs
+func (c *CircuitBreaker) reachRetryTimestamp(t time.Time) bool {
+	return base.UnixMs(t) >= atomic.LoadInt64(&c.nextRetryTimestampMs)
 }
 
 func (c *CircuitBreaker) stat(fn func() error) error {
-	return c.opt.stat.Stat(fn)()
+	sf := fn
+	for _, stat := range c.opt.stats {
+		sf = stat.Stat(sf)
+	}
+
+	return sf()
 }
 
-func (c *CircuitBreaker) updateNextRetryTimestampMs() {
-	mills := time.Millisecond / time.Nanosecond
-	currentTimeMills := time.Now().UnixNano() / int64(mills)
+func (c *CircuitBreaker) updateNextRetryTimestampMs(t time.Time) {
+	currentTimeMills := base.UnixMs(t)
 	atomic.StoreInt64(&c.nextRetryTimestampMs, currentTimeMills)
 	return
 }
@@ -132,16 +114,19 @@ func (c *CircuitBreaker) tryUpdateState(cur State, err error) {
 		if err == nil {
 			c.state.Store(Closed)
 		} else {
-			c.updateNextRetryTimestampMs()
+			c.updateNextRetryTimestampMs(time.Now())
 			c.state.Store(Open)
 		}
 		return
 	}
 
-	// 当前状态closed，err != nil
-	if c.opt.detect.Detect(c.opt.stat.MatchCount(), c.opt.stat.Total()) {
-		c.state.Store(Open)
-		c.updateNextRetryTimestampMs()
+	for _, detector := range c.opt.detects {
+		for _, stat := range c.opt.stats {
+			if detector.Detect(stat.String(), stat.MatchCount(), stat.Total()) {
+				c.state.Store(Open)
+				c.updateNextRetryTimestampMs(time.Now())
+			}
+		}
 	}
 }
 
