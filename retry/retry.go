@@ -1,6 +1,7 @@
 package retry
 
 import (
+	"context"
 	"time"
 )
 
@@ -9,19 +10,21 @@ import (
 // 不可重试策略
 // 总时长
 // 总次数
-type Retryer struct {
+type Retrier struct {
 	opt Options
 }
 
 // 重试
-func (r *Retryer) Retry(fn func() error) (err error) {
+// 限制单点重试
+// 超时处理
+func (r *Retrier) Retry(ctx context.Context, fn func() error) (err error) {
 	now := time.Now().UnixNano()
 	for i := 0; i <= r.opt.maxCount; i++ {
 		if err = fn(); err == nil {
 			return nil
 		}
-		// 不可重试错误直接返回
-		if !r.opt.ref.IsRetryError(err) {
+		// 不可重试直接返回错误
+		if !r.opt.rctx.CanRetry(ctx) {
 			return err
 		}
 
@@ -33,10 +36,10 @@ func (r *Retryer) Retry(fn func() error) (err error) {
 	return
 }
 
-func NewRetryer(opts ...Option) *Retryer {
+func NewRetryer(opts ...Option) *Retrier {
 	opt := Options{
-		ref:      RetryErrorFunc(nopRetryError),
 		bo:       BackoffFunc(NopBackoff),
+		rctx:     RetryContextFunc(NopCanRetry),
 		maxCount: 1,
 		maxDelay: int64(time.Second),
 	}
@@ -44,7 +47,7 @@ func NewRetryer(opts ...Option) *Retryer {
 		o(&opt)
 	}
 
-	return &Retryer{
+	return &Retrier{
 		opt: opt,
 	}
 }

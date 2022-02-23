@@ -1,7 +1,7 @@
 package retry
 
 type Options struct {
-	ref      RetryError
+	rctx     RetryContext
 	bo       Backoff
 	maxDelay int64
 	maxCount int
@@ -21,14 +21,14 @@ func WithMaxCount(cnt int) Option {
 	}
 }
 
-func WithRetryError(r RetryError) Option {
-	return func(o *Options) {
-		o.ref = r
-	}
-}
-
 func WithBackoff(b Backoff) Option {
 	return func(o *Options) {
 		o.bo = b
+	}
+}
+
+func WithRetryContext(r RetryContext) Option {
+	return func(o *Options) {
+		o.rctx = r
 	}
 }
