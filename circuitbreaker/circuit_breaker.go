@@ -96,7 +96,7 @@ func (c *CircuitBreaker) stat(fn func() error) error {
 
 func (c *CircuitBreaker) updateNextRetryTimestampMs(t time.Time) {
 	currentTimeMills := base.UnixMs(t)
-	atomic.StoreInt64(&c.nextRetryTimestampMs, currentTimeMills)
+	atomic.StoreInt64(&c.nextRetryTimestampMs, currentTimeMills+c.opt.retryTimeoutMs)
 	return
 }
 

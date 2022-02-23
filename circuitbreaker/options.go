@@ -5,7 +5,7 @@ package circuitbreaker
 type Options struct {
 	stats          []CircuitBreakerStat
 	detects        []CircuitDetector
-	retryTimeoutMs uint64
+	retryTimeoutMs int64
 }
 
 type Option func(*Options)
@@ -22,7 +22,7 @@ func WithDetectName(detect ...CircuitDetector) Option {
 	}
 }
 
-func WithRetryTimeoutMs(retryTimeoutMs uint64) Option {
+func WithRetryTimeoutMs(retryTimeoutMs int64) Option {
 	return func(options *Options) {
 		options.retryTimeoutMs = retryTimeoutMs
 	}
