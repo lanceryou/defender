@@ -1,4 +1,4 @@
-package base
+package timering
 
 import (
 	"fmt"
@@ -24,9 +24,8 @@ type TimeRing struct {
 	buckets          []Bucket
 }
 
-func NewTimeRing(intervalInMs uint32, bucketCount uint32, reset []ResetBucket) *TimeRing {
-	if intervalInMs%bucketCount != 0 ||
-		(int(intervalInMs/bucketCount) != len(reset)) {
+func NewTimeRing(intervalInMs uint32, bucketCount uint32) *TimeRing {
+	if intervalInMs%bucketCount != 0 {
 		panic(fmt.Errorf("time ring intervalInMs must be divide bucketCount."))
 	}
 
@@ -36,12 +35,6 @@ func NewTimeRing(intervalInMs uint32, bucketCount uint32, reset []ResetBucket) *
 		bucketLengthInMs: intervalInMs / bucketCount,
 	}
 
-	r.buckets = make([]Bucket, bucketCount)
-	for i := range r.buckets {
-		r.buckets[i] = Bucket{
-			ResetBucket: reset[i],
-		}
-	}
 	return r
 }
 
@@ -50,6 +43,16 @@ func NewTimeRing(intervalInMs uint32, bucketCount uint32, reset []ResetBucket) *
 func (r *TimeRing) calcBucketIndex(now int64) int64 {
 	idx := now / int64(r.bucketLengthInMs)
 	return idx % int64(r.bucketCount)
+}
+
+// SetResetBuckets
+func (r *TimeRing) SetResetBuckets(buckets []ResetBucket) {
+	r.buckets = make([]Bucket, r.bucketCount)
+	for i := range r.buckets {
+		r.buckets[i] = Bucket{
+			ResetBucket: buckets[i],
+		}
+	}
 }
 
 // CurrentIndex get current bucket index

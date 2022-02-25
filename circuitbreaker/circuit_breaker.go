@@ -76,7 +76,6 @@ func (c *CircuitBreaker) Allow(fn func() error) error {
 		}
 		// half open try probe
 		err := c.stat(fn)
-		c.tryUpdateState(state, err)
 		return err
 	}
 }
@@ -88,7 +87,7 @@ func (c *CircuitBreaker) reachRetryTimestamp(t time.Time) bool {
 func (c *CircuitBreaker) stat(fn func() error) error {
 	sf := fn
 	for _, stat := range c.opt.stats {
-		sf = stat.Stat(sf)
+		sf = stat.Stat(sf, c.tryUpdateState)
 	}
 
 	return sf()
@@ -100,33 +99,23 @@ func (c *CircuitBreaker) updateNextRetryTimestampMs(t time.Time) {
 	return
 }
 
-func (c *CircuitBreaker) tryUpdateState(cur State, err error) {
+func (c *CircuitBreaker) tryUpdateState(match bool, reach bool) {
+	cur := c.state.Load()
 	if cur == Open {
 		return
-	}
-
-	// 	状态不需要扭转
-	if cur == Closed && err == nil {
-		return
-	}
-	// 当前状态是half open probe成功转closed，失败open
-	if cur == HalfOpen {
-		if err == nil {
+	} else if cur == HalfOpen {
+		if !match {
 			c.state.Store(Closed)
 		} else {
+			// probe failed
+			// HalfOpen to Open
 			c.updateNextRetryTimestampMs(time.Now())
 			c.state.Store(Open)
 		}
-		return
-	}
-
-	for _, detector := range c.opt.detects {
-		for _, stat := range c.opt.stats {
-			if detector.Detect(stat.String(), stat.MatchCount(), stat.Total()) {
-				c.state.Store(Open)
-				c.updateNextRetryTimestampMs(time.Now())
-			}
-		}
+	} else if cur == Closed && reach {
+		//  Closed to Open
+		c.state.Store(Open)
+		c.updateNextRetryTimestampMs(time.Now())
 	}
 }
 

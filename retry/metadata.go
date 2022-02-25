@@ -3,7 +3,7 @@ package retry
 import (
 	"context"
 
-	"github.com/lanceryou/defender/metadata"
+	"github.com/lanceryou/defender/pkg/metadata"
 )
 
 // RetryContext retry context

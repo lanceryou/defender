@@ -5,23 +5,29 @@ import (
 	"time"
 
 	"github.com/lanceryou/defender/internal/base"
+	"github.com/lanceryou/defender/pkg/timering"
 )
 
 type errorStat struct {
 	errBuckets []errBucket
-	*base.TimeRing
+	ratio      float64
+	match      int64
+	*timering.TimeRing
 }
 
-func NewErrorStat(intervalInMs uint32, bucketCount uint32) *errorStat {
-	ss := &errorStat{}
+func NewErrorStat(ring *timering.TimeRing, ratio float64, match int64) *errorStat {
+	ss := &errorStat{
+		ratio: ratio,
+		match: match,
+	}
 
-	ss.errBuckets = make([]errBucket, intervalInMs/bucketCount)
-
-	bucketResetArray := make([]base.ResetBucket, len(ss.errBuckets))
+	// ss.errBuckets = make([]errBucket, intervalInMs/bucketCount)
+	bucketResetArray := make([]timering.ResetBucket, len(ss.errBuckets))
 	for i := 0; i < len(bucketResetArray); i++ {
 		bucketResetArray[i] = &ss.errBuckets[i]
 	}
-	ss.TimeRing = base.NewTimeRing(intervalInMs, bucketCount, bucketResetArray)
+	ss.TimeRing = ring
+	ss.SetResetBuckets(bucketResetArray)
 	return ss
 }
 
@@ -43,20 +49,30 @@ func (s *errorStat) Total() int64 {
 	return cnt
 }
 
-func (s *errorStat) Stat(fn func() error) func() error {
+func (s *errorStat) Stat(fn func() error, cr func(match bool, reach bool)) func() error {
 	return func() error {
 		err := fn()
 		idx := s.CurrentIndex(time.Now().UnixNano())
-		if err != nil {
+		match := err != nil
+		if match {
 			atomic.AddInt64(&s.errBuckets[idx].errCount, 1)
 		}
 		atomic.AddInt64(&s.errBuckets[idx].totalCount, 1)
+
+		cr(match, s.reachCircuit())
 		return err
 	}
 }
 
 func (s *errorStat) String() string {
 	return "errStat"
+}
+
+func (s *errorStat) reachCircuit() bool {
+	matchCount := s.MatchCount()
+	totalCount := s.Total()
+	return matchCount >= s.match ||
+		base.FloatGte(float64(matchCount)/float64(totalCount), s.ratio)
 }
 
 type errBucket struct {

@@ -3,22 +3,21 @@ package circuitbreaker
 import (
 	"github.com/lanceryou/defender/internal/circuitbreaker/errorstat"
 	"github.com/lanceryou/defender/internal/circuitbreaker/slowstat"
+	"github.com/lanceryou/defender/pkg/timering"
 )
 
 // 统计熔断信息
 type CircuitBreakerStat interface {
-	Stat(fn func() error) func() error
-	Total() int64
-	MatchCount() int64
+	Stat(fn func() error, cr func(match bool, reach bool)) func() error
 	String() string
 }
 
-func NewSlowStat(slowResponseMs int64, intervalInMs uint32, bucketCount uint32) CircuitBreakerStat {
-	return slowstat.NewSlowStat(slowResponseMs, intervalInMs, bucketCount)
+func NewSlowStat(slowResponseMs int64, ring *timering.TimeRing, ratio float64) CircuitBreakerStat {
+	return slowstat.NewSlowStat(slowResponseMs, ring, ratio)
 }
 
-func NewErrStat(intervalInMs uint32, bucketCount uint32) CircuitBreakerStat {
-	return errorstat.NewErrorStat(intervalInMs, bucketCount)
+func NewErrStat(ring *timering.TimeRing, ratio float64, total int64) CircuitBreakerStat {
+	return errorstat.NewErrorStat(ring, ratio, total)
 }
 
 var (

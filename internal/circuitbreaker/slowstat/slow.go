@@ -5,24 +5,30 @@ import (
 	"time"
 
 	"github.com/lanceryou/defender/internal/base"
+	"github.com/lanceryou/defender/pkg/timering"
 )
 
 type SlowStat struct {
 	slowResponseMs int64 // 慢回复值
+	ratio          float64
 	slowBuckets    []SlowBucket
-	*base.TimeRing
+	*timering.TimeRing
 }
 
-func NewSlowStat(slowResponseMs int64, intervalInMs uint32, bucketCount uint32) *SlowStat {
-	ss := &SlowStat{slowResponseMs: slowResponseMs}
+func NewSlowStat(slowResponseMs int64, ring *timering.TimeRing, ratio float64) *SlowStat {
+	ss := &SlowStat{
+		slowResponseMs: slowResponseMs,
+		ratio:          ratio,
+	}
 
-	ss.slowBuckets = make([]SlowBucket, intervalInMs/bucketCount)
+	// ss.slowBuckets = make([]SlowBucket, intervalInMs/bucketCount)
 
-	bucketResetArray := make([]base.ResetBucket, len(ss.slowBuckets))
+	bucketResetArray := make([]timering.ResetBucket, len(ss.slowBuckets))
 	for i := 0; i < len(bucketResetArray); i++ {
 		bucketResetArray[i] = &ss.slowBuckets[i]
 	}
-	ss.TimeRing = base.NewTimeRing(intervalInMs, bucketCount, bucketResetArray)
+	ss.TimeRing = ring
+	ss.SetResetBuckets(bucketResetArray)
 	return ss
 }
 
@@ -44,7 +50,7 @@ func (s *SlowStat) Total() int64 {
 	return cnt
 }
 
-func (s *SlowStat) Stat(fn func() error) func() error {
+func (s *SlowStat) Stat(fn func() error, cr func(match bool, reach bool)) func() error {
 	return func() error {
 		start := time.Now().UnixNano()
 		err := fn()
@@ -52,16 +58,23 @@ func (s *SlowStat) Stat(fn func() error) func() error {
 		elapsed := end - start
 
 		idx := s.CurrentIndex(start)
-		if elapsed >= s.slowResponseMs {
+		match := elapsed >= s.slowResponseMs
+		if match {
 			atomic.AddInt64(&s.slowBuckets[idx].slowCount, 1)
 		}
 		atomic.AddInt64(&s.slowBuckets[idx].totalCount, 1)
+
+		cr(match, s.ratioDetect())
 		return err
 	}
 }
 
 func (s *SlowStat) String() string {
 	return "slowStat"
+}
+
+func (s *SlowStat) ratioDetect() bool {
+	return base.FloatGte(float64(s.MatchCount())/float64(s.Total()), s.ratio)
 }
 
 //
