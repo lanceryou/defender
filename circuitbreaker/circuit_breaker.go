@@ -53,6 +53,14 @@ type circuitBreaker struct {
 	retryTimeoutMs       int64
 }
 
+func newCircuitBreaker(stat CircuitBreakerStat, rt int64) *circuitBreaker {
+	return &circuitBreaker{
+		state:          Closed,
+		stat:           stat,
+		retryTimeoutMs: rt,
+	}
+}
+
 // slowRT
 // err
 // metrics
@@ -60,7 +68,7 @@ type circuitBreaker struct {
 // metrics 信息收集？
 type CircuitBreaker struct {
 	opt    Options
-	cbList []circuitBreaker
+	cbList []*circuitBreaker
 }
 
 func (c *CircuitBreaker) Allow(fn func() error) error {
@@ -132,7 +140,13 @@ func NewCircuitBreaker(option ...Option) *CircuitBreaker {
 		o(&opt)
 	}
 
-	return &CircuitBreaker{
+	cb := &CircuitBreaker{
 		opt: opt,
 	}
+
+	for _, stat := range opt.stats {
+		cb.cbList = append(cb.cbList, newCircuitBreaker(stat, opt.retryTimeoutMs))
+	}
+
+	return cb
 }
