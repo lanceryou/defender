@@ -46,22 +46,38 @@ func (s State) cas(expect State, update State) bool {
 	return atomic.CompareAndSwapInt32((*int32)(&s), int32(expect), int32(update))
 }
 
+type circuitBreaker struct {
+	state                State
+	nextRetryTimestampMs int64
+	stat                 CircuitBreakerStat
+	retryTimeoutMs       int64
+}
+
 // slowRT
 // err
 // metrics
 // 一个资源一个CircuitBreaker？
 // metrics 信息收集？
 type CircuitBreaker struct {
-	opt                  Options
-	state                State
-	nextRetryTimestampMs int64
+	opt    Options
+	cbList []circuitBreaker
+}
+
+func (c *CircuitBreaker) Allow(fn func() error) error {
+	for _, cb := range c.cbList {
+		if err := cb.Allow(fn); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 /* Allow
  * 全部状态转移放这里
  *
  */
-func (c *CircuitBreaker) Allow(fn func() error) error {
+func (c *circuitBreaker) Allow(fn func() error) error {
 	for {
 		state := c.state.Load()
 		if state == Open {
@@ -75,31 +91,22 @@ func (c *CircuitBreaker) Allow(fn func() error) error {
 			}
 		}
 		// half open try probe
-		err := c.stat(fn)
+		err := c.stat.Stat(fn, c.tryUpdateState)()
 		return err
 	}
 }
 
-func (c *CircuitBreaker) reachRetryTimestamp(t time.Time) bool {
+func (c *circuitBreaker) reachRetryTimestamp(t time.Time) bool {
 	return base.UnixMs(t) >= atomic.LoadInt64(&c.nextRetryTimestampMs)
 }
 
-func (c *CircuitBreaker) stat(fn func() error) error {
-	sf := fn
-	for _, stat := range c.opt.stats {
-		sf = stat.Stat(sf, c.tryUpdateState)
-	}
-
-	return sf()
-}
-
-func (c *CircuitBreaker) updateNextRetryTimestampMs(t time.Time) {
+func (c *circuitBreaker) updateNextRetryTimestampMs(t time.Time) {
 	currentTimeMills := base.UnixMs(t)
-	atomic.StoreInt64(&c.nextRetryTimestampMs, currentTimeMills+c.opt.retryTimeoutMs)
+	atomic.StoreInt64(&c.nextRetryTimestampMs, currentTimeMills+c.retryTimeoutMs)
 	return
 }
 
-func (c *CircuitBreaker) tryUpdateState(match bool, reach bool) {
+func (c *circuitBreaker) tryUpdateState(match bool, reach bool) {
 	cur := c.state.Load()
 	if cur == Open {
 		return
@@ -126,7 +133,6 @@ func NewCircuitBreaker(option ...Option) *CircuitBreaker {
 	}
 
 	return &CircuitBreaker{
-		opt:   opt,
-		state: Closed,
+		opt: opt,
 	}
 }
